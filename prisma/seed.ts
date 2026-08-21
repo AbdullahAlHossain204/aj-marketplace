@@ -97,7 +97,123 @@ async function main() {
     });
   }
 
+  // ── Demo catalog (local dev / Phase 3 verification only) ────
+  // Gated behind SEED_DEMO_CATALOG so a real deploy's seed run doesn't
+  // create fake storefront data — set it in your local .env, not in staging/prod.
+  if (process.env.SEED_DEMO_CATALOG === 'true') {
+    await seedDemoCatalog(sellerRole.id);
+  }
+
   console.log('Seed complete: roles, permissions, admin account, and default commission created.');
+}
+
+async function seedDemoCatalog(sellerRoleId: string) {
+  const electronics = await prisma.category.upsert({
+    where: { slug: 'electronics' },
+    update: {},
+    create: { name: 'Electronics', slug: 'electronics' },
+  });
+  const phones = await prisma.category.upsert({
+    where: { slug: 'phones' },
+    update: {},
+    create: { name: 'Phones', slug: 'phones', parentId: electronics.id },
+  });
+  await prisma.category.upsert({
+    where: { slug: 'fashion' },
+    update: {},
+    create: { name: 'Fashion', slug: 'fashion' },
+  });
+
+  const brand = await prisma.brand.upsert({
+    where: { slug: 'demo-brand' },
+    update: {},
+    create: { name: 'Demo Brand', slug: 'demo-brand' },
+  });
+
+  const store = await prisma.store.upsert({
+    where: { slug: 'demo-store' },
+    update: {},
+    create: { name: 'Demo Store', slug: 'demo-store', status: 'ACTIVE' },
+  });
+
+  const sellerPasswordHash = await hashPassword('DemoSeller123');
+  const sellerUser = await prisma.user.upsert({
+    where: { email: 'seller@ajmarketplace.example' },
+    update: {},
+    create: {
+      email: 'seller@ajmarketplace.example',
+      name: 'Demo Seller',
+      passwordHash: sellerPasswordHash,
+      status: 'ACTIVE',
+      emailVerified: new Date(),
+      roleId: sellerRoleId,
+    },
+  });
+  await prisma.seller.upsert({
+    where: { userId: sellerUser.id },
+    update: {},
+    create: { userId: sellerUser.id, storeId: store.id },
+  });
+
+  const demoProducts = [
+    {
+      slug: 'aurora-wireless-headphones',
+      name: 'Aurora Wireless Headphones',
+      basePrice: 4500,
+      discountPrice: 3999,
+      variants: [{ sku: 'AUR-BLK', attributes: { color: 'Black' }, price: 3999, stock: 25 }],
+    },
+    {
+      slug: 'pulse-smartphone-x1',
+      name: 'Pulse Smartphone X1',
+      basePrice: 32000,
+      discountPrice: null,
+      variants: [
+        { sku: 'PLS-64', attributes: { storage: '64GB' }, price: 32000, stock: 10 },
+        { sku: 'PLS-128', attributes: { storage: '128GB' }, price: 36000, stock: 8 },
+      ],
+    },
+  ];
+
+  for (const p of demoProducts) {
+    const product = await prisma.product.upsert({
+      where: { slug: p.slug },
+      update: {},
+      create: {
+        storeId: store.id,
+        categoryId: phones.id,
+        brandId: brand.id,
+        name: p.name,
+        slug: p.slug,
+        description: `${p.name} — demo product seeded for local Phase 3 testing.`,
+        shortDescription: p.name,
+        sku: `${p.slug}-base`,
+        basePrice: p.basePrice,
+        discountPrice: p.discountPrice ?? undefined,
+        status: 'ACTIVE',
+      },
+    });
+
+    for (const v of p.variants) {
+      const variant = await prisma.productVariant.upsert({
+        where: { sku: v.sku },
+        update: {},
+        create: {
+          productId: product.id,
+          sku: v.sku,
+          price: v.price,
+          attributes: v.attributes,
+        },
+      });
+      await prisma.inventory.upsert({
+        where: { variantId: variant.id },
+        update: {},
+        create: { variantId: variant.id, quantity: v.stock, reserved: 0 },
+      });
+    }
+  }
+
+  console.log('Demo catalog seeded (category/brand/store/seller/products).');
 }
 
 main()

@@ -1,6 +1,6 @@
 import type { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import { PrismaAdapter } from '@auth/prisma-adapter';
+import { PrismaAdapter } from '@next-auth/prisma-adapter';
 import { prisma } from '@/lib/db/prisma';
 import { verifyPassword } from '@/lib/utils/password';
 import { checkLoginRateLimit } from '@/lib/auth/rate-limit';

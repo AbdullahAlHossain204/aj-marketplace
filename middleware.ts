@@ -32,5 +32,8 @@ export default withAuth(
 );
 
 export const config = {
-  matcher: ['/admin/:path*', '/seller/:path*', '/account/:path*'],
+  // /cart and /checkout added in Phase 3 — same "first line of defense"
+  // reasoning as /account: the pages themselves also redirect server-side
+  // via getCurrentUser(), this just avoids the extra round trip.
+  matcher: ['/admin/:path*', '/seller/:path*', '/account/:path*', '/cart/:path*', '/checkout/:path*'],
 };
