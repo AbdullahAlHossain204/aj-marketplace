@@ -1,0 +1,496 @@
+// ============================================================================
+// AJ MARKET — Prisma Schema (Phase 2: Full Data Model)
+// ============================================================================
+// Conventions:
+// - All IDs are UUIDs.
+// - All money fields are Int, stored in the smallest currency unit
+//   (e.g. paisa/cents) to avoid floating point rounding errors.
+// - createdAt/updatedAt on every table. deletedAt (soft delete) on tables
+//   where hard-deleting would break historical records (users, stores,
+//   products, categories, addresses, reviews) — order/order-item history
+//   is never soft-deleted, it's immutable once placed.
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum Role {
+  CUSTOMER
+  VENDOR
+  ADMIN
+}
+
+enum VendorStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  COD
+  ONLINE
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+enum NotificationType {
+  ORDER
+  ACCOUNT
+  VENDOR
+  ADMIN
+  STOCK
+  PROMOTION
+}
+
+// ============================================================================
+// USERS & AUTH
+// ============================================================================
+
+model User {
+  id        String    @id @default(uuid())
+  email     String    @unique
+  password  String
+  name      String
+  phone     String?
+  role      Role      @default(CUSTOMER)
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  vendorProfile VendorProfile?
+  addresses     Address[]
+  cart          Cart?
+  wishlist      Wishlist?
+  orders        Order[]
+  reviews       Review[]
+  notifications Notification[]
+  refreshTokens RefreshToken[]
+
+  @@index([role])
+  @@index([email])
+}
+
+/// Opaque refresh tokens (not JWTs) so they can be individually revoked on
+/// logout and rotated on every use — a stolen, already-used refresh token
+/// is detected and the whole chain can be invalidated. Only the SHA-256
+/// hash is stored, never the raw token.
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+}
+
+// ============================================================================
+// VENDOR & STORE
+// ============================================================================
+
+model VendorProfile {
+  id            String       @id @default(uuid())
+  userId        String       @unique
+  businessName  String
+  businessEmail String
+  businessPhone String?
+  status        VendorStatus @default(PENDING)
+  approvedAt    DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  deletedAt     DateTime?
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  store Store?
+
+  @@index([status])
+}
+
+model Store {
+  id              String    @id @default(uuid())
+  vendorProfileId String    @unique
+  name            String
+  slug            String    @unique
+  description     String?
+  logoUrl         String?
+  bannerUrl       String?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  vendorProfile VendorProfile @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
+  products      Product[]
+  orderItems    OrderItem[]
+
+  @@index([isActive])
+  @@index([slug])
+}
+
+// ============================================================================
+// CATALOG: CATEGORIES, PRODUCTS, VARIANTS, INVENTORY
+// ============================================================================
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String
+  slug        String    @unique
+  description String?
+  imageUrl    String?
+  parentId    String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  parent   Category?  @relation("CategoryToChildren", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryToChildren")
+  products Product[]
+
+  @@index([parentId])
+  @@index([slug])
+}
+
+model Product {
+  id          String        @id @default(uuid())
+  storeId     String
+  categoryId  String
+  name        String
+  slug        String        @unique
+  description String?
+  basePrice   Int // smallest currency unit
+  currency    String        @default("BDT")
+  status      ProductStatus @default(DRAFT)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  deletedAt   DateTime?
+
+  store      Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  category   Category         @relation(fields: [categoryId], references: [id])
+  images     ProductImage[]
+  variants   ProductVariant[]
+  cartItems  CartItem[]
+  wishlisted WishlistItem[]
+  orderItems OrderItem[]
+  reviews    Review[]
+
+  @@index([storeId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([storeId, status])
+}
+
+model ProductImage {
+  id        String   @id @default(uuid())
+  productId String
+  url       String
+  altText   String?
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+/// Every product has at least one variant (a "Standard" default variant if
+/// the vendor doesn't define real options like size/color). Stock is always
+/// tracked at the variant level — this avoids ambiguous "does this product
+/// have stock" questions once variants exist.
+model ProductVariant {
+  id         String    @id @default(uuid())
+  productId  String
+  name       String // e.g. "Standard", "Size: L / Color: Red"
+  sku        String    @unique
+  priceDelta Int       @default(0) // added to product.basePrice; can be negative
+  attributes Json? // e.g. { "size": "L", "color": "Red" }
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  inventory InventoryRecord?
+  cartItems CartItem[]
+  orderItems OrderItem[]
+
+  @@index([productId])
+}
+
+model InventoryRecord {
+  id                String   @id @default(uuid())
+  productVariantId  String   @unique
+  quantity          Int      @default(0)
+  reservedQuantity  Int      @default(0)
+  lowStockThreshold Int      @default(5)
+  updatedAt         DateTime @updatedAt
+
+  productVariant ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+
+  @@index([quantity])
+}
+
+// ============================================================================
+// CART & WISHLIST
+// ============================================================================
+
+model Cart {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items CartItem[]
+}
+
+model CartItem {
+  id               String   @id @default(uuid())
+  cartId           String
+  productId        String
+  productVariantId String
+  quantity         Int      @default(1)
+  addedAt          DateTime @default(now())
+
+  cart           Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product        Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productVariant ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, productVariantId])
+  @@index([cartId])
+}
+
+model Wishlist {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  createdAt DateTime @default(now())
+
+  user  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items WishlistItem[]
+}
+
+model WishlistItem {
+  id         String   @id @default(uuid())
+  wishlistId String
+  productId  String
+  addedAt    DateTime @default(now())
+
+  wishlist Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([wishlistId, productId])
+  @@index([wishlistId])
+}
+
+// ============================================================================
+// ADDRESSES
+// ============================================================================
+
+model Address {
+  id            String    @id @default(uuid())
+  userId        String
+  label         String? // e.g. "Home", "Office"
+  recipientName String
+  phone         String
+  addressLine1  String
+  addressLine2  String?
+  city          String
+  state         String?
+  postalCode    String?
+  country       String    @default("Bangladesh")
+  isDefault     Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@index([userId])
+}
+
+// ============================================================================
+// ORDERS
+// ============================================================================
+
+model Order {
+  id             String        @id @default(uuid())
+  orderNumber    String        @unique
+  userId         String
+  addressId      String
+  couponId       String?
+  subtotal       Int
+  discountTotal  Int           @default(0)
+  shippingTotal  Int           @default(0)
+  taxTotal       Int           @default(0)
+  grandTotal     Int
+  currency       String        @default("BDT")
+  status         OrderStatus   @default(PENDING)
+  paymentMethod  PaymentMethod @default(COD)
+  paymentStatus  PaymentStatus @default(PENDING)
+  placedAt       DateTime      @default(now())
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  user    User        @relation(fields: [userId], references: [id])
+  address Address     @relation(fields: [addressId], references: [id])
+  coupon  Coupon?     @relation(fields: [couponId], references: [id])
+  items   OrderItem[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([paymentStatus])
+  @@index([orderNumber])
+}
+
+/// storeId is denormalized onto each order item so vendors can query "my
+/// orders" directly without joining through Product for every request —
+/// a single marketplace order can span multiple vendors' items.
+/// Name/price are snapshotted at time of purchase so historical orders
+/// stay accurate even if the vendor later edits or deletes the product.
+model OrderItem {
+  id                     String   @id @default(uuid())
+  orderId                String
+  storeId                String
+  productId              String
+  productVariantId       String
+  productNameSnapshot    String
+  variantNameSnapshot    String
+  unitPrice              Int
+  quantity               Int
+  lineTotal              Int
+  status                 OrderStatus @default(PENDING)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  order          Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  store          Store          @relation(fields: [storeId], references: [id])
+  product        Product        @relation(fields: [productId], references: [id])
+  productVariant ProductVariant @relation(fields: [productVariantId], references: [id])
+
+  @@index([orderId])
+  @@index([storeId])
+  @@index([storeId, status])
+}
+
+// ============================================================================
+// REVIEWS
+// ============================================================================
+
+/// One review per user per product. orderId links back to a delivered
+/// order item to support a "verified purchase" badge; nullable because
+/// early-stage moderation may allow unverified reviews.
+model Review {
+  id                 String       @id @default(uuid())
+  productId          String
+  userId             String
+  orderId            String?
+  rating             Int
+  title              String?
+  comment            String?
+  isVerifiedPurchase Boolean      @default(false)
+  status             ReviewStatus @default(PENDING)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  deletedAt          DateTime?
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, userId])
+  @@index([productId])
+  @@index([status])
+}
+
+// ============================================================================
+// COUPONS
+// ============================================================================
+
+model Coupon {
+  id                String       @id @default(uuid())
+  code              String       @unique
+  description       String?
+  discountType      DiscountType
+  discountValue     Int // percentage (0-100) or fixed amount in smallest unit
+  minOrderAmount    Int?
+  maxDiscountAmount Int?
+  usageLimit        Int?
+  usedCount         Int          @default(0)
+  startsAt          DateTime?
+  expiresAt         DateTime?
+  isActive          Boolean      @default(true)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  orders Order[]
+
+  @@index([code])
+  @@index([isActive])
+}
+
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
+
+model Notification {
+  id        String            @id @default(uuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  isRead    Boolean           @default(false)
+  metadata  Json?
+  createdAt DateTime          @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, isRead])
+}
