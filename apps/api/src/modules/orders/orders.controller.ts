@@ -30,3 +30,8 @@ export const cancelOrderHandler = asyncHandler(async (req: Request, res: Respons
   const order = await ordersService.cancelOrder(uid(req), req.params.id);
   res.json({ success: true, data: order, error: null });
 });
+
+export const getOrderTransactionsHandler = asyncHandler(async (req: Request, res: Response) => {
+  const transactions = await ordersService.getOrderTransactions(uid(req), req.params.id);
+  res.json({ success: true, data: transactions, error: null });
+});

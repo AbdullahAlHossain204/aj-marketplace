@@ -176,6 +176,18 @@ export interface OrderView {
   address?: Address;
 }
 
+export interface TransactionView {
+  id: string;
+  provider: "COD" | "MOCK";
+  type: "PAYMENT" | "REFUND";
+  status: "PENDING" | "SUCCEEDED" | "FAILED";
+  amount: number;
+  currency: string;
+  providerRef: string | null;
+  failureReason: string | null;
+  createdAt: string;
+}
+
 export interface Pagination {
   page: number;
   limit: number;

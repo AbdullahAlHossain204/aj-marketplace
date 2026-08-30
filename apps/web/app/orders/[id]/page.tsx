@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "../../../lib/AuthContext";
-import { OrderView, formatPrice } from "../../../lib/types";
+import { OrderView, TransactionView, formatPrice } from "../../../lib/types";
 
 const statusColors: Record<string, string> = {
   PENDING: "bg-yellow-50 text-yellow-700",
@@ -21,6 +21,7 @@ export default function OrderDetailPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const [order, setOrder] = useState<OrderView | null>(null);
+  const [transactions, setTransactions] = useState<TransactionView[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
 
@@ -38,6 +39,9 @@ export default function OrderDetailPage() {
     const res = await authFetch<OrderView>(`/api/v1/orders/${params.id}`);
     if (res.success && res.data) setOrder(res.data);
     else setError(res.error?.message ?? "Could not load order");
+
+    const txRes = await authFetch<TransactionView[]>(`/api/v1/orders/${params.id}/transactions`);
+    if (txRes.success && txRes.data) setTransactions(txRes.data);
   }
 
   async function handleCancel() {
@@ -124,6 +128,39 @@ export default function OrderDetailPage() {
           </p>
         </div>
       </div>
+
+      {transactions.length > 0 && (
+        <div className="mb-6 rounded-lg border border-gray-200 bg-white p-6">
+          <h2 className="mb-3 font-semibold">Transaction History</h2>
+          <div className="flex flex-col gap-2 text-sm">
+            {transactions.map((tx) => (
+              <div key={tx.id} className="flex items-center justify-between border-b border-gray-100 pb-2 last:border-0 last:pb-0">
+                <div>
+                  <p className="font-medium">
+                    {tx.type === "PAYMENT" ? "Payment" : "Refund"} · {tx.provider}
+                  </p>
+                  <p className="text-xs text-gray-500">{new Date(tx.createdAt).toLocaleString()}</p>
+                  {tx.failureReason && <p className="text-xs text-red-600">{tx.failureReason}</p>}
+                </div>
+                <div className="text-right">
+                  <p className="font-medium">{formatPrice(tx.amount, tx.currency)}</p>
+                  <span
+                    className={`text-xs font-medium ${
+                      tx.status === "SUCCEEDED"
+                        ? "text-green-600"
+                        : tx.status === "FAILED"
+                        ? "text-red-600"
+                        : "text-yellow-600"
+                    }`}
+                  >
+                    {tx.status}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
 

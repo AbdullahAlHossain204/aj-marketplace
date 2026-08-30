@@ -2,6 +2,8 @@ import crypto from "crypto";
 import { prisma } from "../../lib/prisma";
 import { AppError, ForbiddenError, NotFoundError } from "../../lib/errors";
 import { CheckoutInput, OrderListQuery } from "./orders.schemas";
+import { chargeForCheckout, recordTransaction, refundFailedCheckout, refundOrder, listOrderTransactions } from "../payments/payments.service";
+import { logger } from "../../lib/logger";
 
 // Flat shipping fee per order (smallest currency unit). Real per-vendor or
 // distance-based shipping logic is a Phase 13 (delivery) concern.
@@ -23,10 +25,6 @@ function generateOrderNumber(): string {
  * no oversell is possible, and no explicit row locking is needed.
  */
 export async function checkout(userId: string, input: CheckoutInput) {
-  if (input.paymentMethod === "ONLINE") {
-    throw new AppError("Online payment isn't available yet — please choose Cash on Delivery", 400);
-  }
-
   const address = await prisma.address.findUnique({ where: { id: input.addressId } });
   if (!address || address.deletedAt) throw new NotFoundError("Address");
   if (address.userId !== userId) throw new ForbiddenError("This address does not belong to you");
@@ -80,42 +78,72 @@ export async function checkout(userId: string, input: CheckoutInput) {
   const computedSubtotal = lineItems.reduce((sum, i) => sum + i.lineTotal, 0);
   const shippingTotal = SHIPPING_FLAT_RATE;
   const grandTotal = computedSubtotal + shippingTotal;
+  const orderNumber = generateOrderNumber();
 
-  const order = await prisma.$transaction(async (tx: any) => {
-    // Atomically decrement stock for every line item; abort on any failure.
-    for (const item of lineItems) {
-      const result = await tx.inventoryRecord.updateMany({
-        where: { productVariantId: item.productVariantId, quantity: { gte: item.quantity } },
-        data: { quantity: { decrement: item.quantity } },
+  // Charge BEFORE touching the database. Payment gateway calls are network
+  // I/O and must never happen inside a DB transaction. If this throws
+  // (payment declined), nothing below has run — the cart is untouched and
+  // the customer can simply retry.
+  const chargeResult = await chargeForCheckout(input.paymentMethod, orderNumber, grandTotal, "BDT");
+
+  let order;
+  try {
+    order = await prisma.$transaction(async (tx: any) => {
+      // Atomically decrement stock for every line item; abort on any failure.
+      for (const item of lineItems) {
+        const result = await tx.inventoryRecord.updateMany({
+          where: { productVariantId: item.productVariantId, quantity: { gte: item.quantity } },
+          data: { quantity: { decrement: item.quantity } },
+        });
+        if (result.count === 0) {
+          throw new AppError(`Insufficient stock for "${item.productNameSnapshot}"`, 409);
+        }
+      }
+
+      const createdOrder = await tx.order.create({
+        data: {
+          orderNumber,
+          userId,
+          addressId: input.addressId,
+          subtotal: computedSubtotal,
+          shippingTotal,
+          discountTotal: 0,
+          taxTotal: 0,
+          grandTotal,
+          paymentMethod: input.paymentMethod,
+          paymentStatus: chargeResult.status === "PENDING" ? "PENDING" : "PAID",
+          status: "PENDING",
+          items: { create: lineItems },
+        },
+        include: { items: true },
       });
-      if (result.count === 0) {
-        throw new AppError(`Insufficient stock for "${item.productNameSnapshot}"`, 409);
+
+      // Empty the cart now that its contents have become an order.
+      await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
+
+      return createdOrder;
+    });
+  } catch (err) {
+    // The charge succeeded but we couldn't complete the order (e.g. a
+    // stock race lost between the charge and this write) — refund
+    // immediately rather than leaving the customer charged with nothing
+    // to show for it. Best-effort: log if even the refund fails, since at
+    // that point this needs a human to reconcile, not a retry loop.
+    if (input.paymentMethod === "ONLINE") {
+      try {
+        await refundFailedCheckout(input.paymentMethod, orderNumber, grandTotal, "BDT", chargeResult.providerRef);
+      } catch (refundErr) {
+        logger.error("Failed to refund after a failed checkout — needs manual reconciliation", {
+          orderNumber,
+          providerRef: chargeResult.providerRef,
+          refundError: refundErr instanceof Error ? refundErr.message : String(refundErr),
+        });
       }
     }
+    throw err;
+  }
 
-    const createdOrder = await tx.order.create({
-      data: {
-        orderNumber: generateOrderNumber(),
-        userId,
-        addressId: input.addressId,
-        subtotal: computedSubtotal,
-        shippingTotal,
-        discountTotal: 0,
-        taxTotal: 0,
-        grandTotal,
-        paymentMethod: input.paymentMethod,
-        paymentStatus: "PENDING",
-        status: "PENDING",
-        items: { create: lineItems },
-      },
-      include: { items: true },
-    });
-
-    // Empty the cart now that its contents have become an order.
-    await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
-
-    return createdOrder;
-  });
+  await recordTransaction(order.id, input.paymentMethod, chargeResult, grandTotal, "BDT");
 
   return order;
 }
@@ -186,5 +214,20 @@ export async function cancelOrder(userId: string, orderId: string) {
     });
   });
 
+  // Only refund when the ENTIRE order is cancelled and it was actually
+  // paid online — a partially-cancelled multi-vendor order (some items
+  // still shipping) isn't refunded automatically here; per-line-item
+  // proration is a more advanced flow than this phase covers.
+  const refreshedOrder = await prisma.order.findUnique({ where: { id: orderId } });
+  if (refreshedOrder.status === "CANCELLED" && refreshedOrder.paymentStatus === "PAID") {
+    await refundOrder(orderId, refreshedOrder.paymentMethod, refreshedOrder.grandTotal, refreshedOrder.currency);
+    await prisma.order.update({ where: { id: orderId }, data: { paymentStatus: "REFUNDED" } });
+  }
+
   return getOrder(userId, orderId);
+}
+
+export async function getOrderTransactions(userId: string, orderId: string) {
+  await getOrder(userId, orderId); // ownership check, throws if not the owner
+  return listOrderTransactions(orderId);
 }

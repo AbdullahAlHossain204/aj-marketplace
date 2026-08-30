@@ -76,6 +76,22 @@ enum DiscountType {
   FIXED
 }
 
+enum TransactionType {
+  PAYMENT
+  REFUND
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum PaymentProviderName {
+  COD
+  MOCK
+}
+
 enum NotificationType {
   ORDER
   ACCOUNT
@@ -383,6 +399,7 @@ model Order {
   address Address     @relation(fields: [addressId], references: [id])
   coupon  Coupon?     @relation(fields: [couponId], references: [id])
   items   OrderItem[]
+  transactions Transaction[]
 
   @@index([userId])
   @@index([status])
@@ -473,6 +490,32 @@ model Coupon {
 
   @@index([code])
   @@index([isActive])
+}
+
+// ============================================================================
+// ============================================================================
+// PAYMENTS
+// ============================================================================
+
+/// One row per payment attempt or refund against an order. Never mutated
+/// after creation — a full history of what was charged, refunded, and
+/// when, independent of the order's current paymentStatus summary field.
+model Transaction {
+  id            String              @id @default(uuid())
+  orderId       String
+  provider      PaymentProviderName
+  type          TransactionType
+  status        TransactionStatus
+  amount        Int
+  currency      String
+  providerRef   String?
+  failureReason String?
+  rawResponse   Json?
+  createdAt     DateTime            @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
 }
 
 // ============================================================================

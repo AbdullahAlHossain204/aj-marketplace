@@ -12,6 +12,7 @@ export default function CheckoutPage() {
   const [cart, setCart] = useState<CartView | null>(null);
   const [addresses, setAddresses] = useState<Address[] | null>(null);
   const [selectedAddressId, setSelectedAddressId] = useState<string>("");
+  const [paymentMethod, setPaymentMethod] = useState<"COD" | "ONLINE">("COD");
   const [error, setError] = useState<string | null>(null);
   const [isPlacing, setIsPlacing] = useState(false);
 
@@ -44,7 +45,7 @@ export default function CheckoutPage() {
 
     const res = await authFetch<OrderView>("/api/v1/orders", {
       method: "POST",
-      body: JSON.stringify({ addressId: selectedAddressId, paymentMethod: "COD" }),
+      body: JSON.stringify({ addressId: selectedAddressId, paymentMethod }),
     });
 
     setIsPlacing(false);
@@ -153,8 +154,46 @@ export default function CheckoutPage() {
       </div>
 
       <div className="mb-6 rounded-lg border border-gray-200 bg-white p-6">
-        <h2 className="mb-2 font-semibold">Payment Method</h2>
-        <p className="text-sm text-gray-600">Cash on Delivery (online payment coming soon)</p>
+        <h2 className="mb-3 font-semibold">Payment Method</h2>
+        <div className="flex flex-col gap-2">
+          <label
+            className={`flex cursor-pointer items-start gap-3 rounded-md border p-3 text-sm ${
+              paymentMethod === "COD" ? "border-brand-600 bg-brand-50" : "border-gray-200"
+            }`}
+          >
+            <input
+              type="radio"
+              name="paymentMethod"
+              checked={paymentMethod === "COD"}
+              onChange={() => setPaymentMethod("COD")}
+              className="mt-1"
+            />
+            <div>
+              <p className="font-medium">Cash on Delivery</p>
+              <p className="text-gray-600">Pay in cash when your order arrives.</p>
+            </div>
+          </label>
+
+          <label
+            className={`flex cursor-pointer items-start gap-3 rounded-md border p-3 text-sm ${
+              paymentMethod === "ONLINE" ? "border-brand-600 bg-brand-50" : "border-gray-200"
+            }`}
+          >
+            <input
+              type="radio"
+              name="paymentMethod"
+              checked={paymentMethod === "ONLINE"}
+              onChange={() => setPaymentMethod("ONLINE")}
+              className="mt-1"
+            />
+            <div>
+              <p className="font-medium">Pay Online (Demo)</p>
+              <p className="text-gray-600">
+                Simulated card payment — no real gateway is connected yet. Charged immediately.
+              </p>
+            </div>
+          </label>
+        </div>
       </div>
 
       {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
@@ -164,7 +203,7 @@ export default function CheckoutPage() {
         disabled={isPlacing || addresses.length === 0}
         className="w-full rounded-md bg-brand-600 px-4 py-3 font-medium text-white hover:bg-brand-700 disabled:opacity-50"
       >
-        {isPlacing ? "Placing order..." : "Place Order"}
+        {isPlacing ? "Placing order..." : paymentMethod === "ONLINE" ? "Pay & Place Order" : "Place Order"}
       </button>
     </main>
   );
