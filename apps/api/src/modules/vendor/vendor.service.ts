@@ -242,6 +242,24 @@ export async function getDashboardOverview(userId: string) {
     }
   }
 
+  // Store-level rating: the average rating across every APPROVED review on
+  // every product in this store — computed on-the-fly from the reviews
+  // relation, same as product-level averageRating() in products.service.ts,
+  // rather than a cached/denormalized figure (no stated performance need
+  // for caching yet).
+  const productIds = products.map((p) => p.id);
+  const reviewAggregate =
+    productIds.length > 0
+      ? await prisma.review.aggregate({
+          where: { productId: { in: productIds }, status: "APPROVED", deletedAt: null },
+          _avg: { rating: true },
+          _count: { rating: true },
+        })
+      : null;
+
+  const storeRating =
+    reviewAggregate?._avg.rating != null ? Math.round(reviewAggregate._avg.rating * 10) / 10 : null;
+
   return {
     store: { id: store.id, name: store.name, slug: store.slug, isActive: store.isActive },
     vendorStatus: profile.status,
@@ -250,6 +268,8 @@ export async function getDashboardOverview(userId: string) {
     draftProductCount: draftCount,
     totalStockUnits,
     lowStockVariants,
+    storeRating,
+    storeReviewCount: reviewAggregate?._count.rating ?? 0,
     // Real order/sales figures land once the Order system (Phase 6) exists.
     totalOrders: 0,
     totalRevenue: 0,

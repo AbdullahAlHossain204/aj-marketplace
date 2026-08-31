@@ -101,6 +101,20 @@ enum NotificationType {
   PROMOTION
 }
 
+enum ReviewReportReason {
+  SPAM
+  ABUSIVE
+  OFFENSIVE
+  FAKE
+  OTHER
+}
+
+enum ReviewReportStatus {
+  PENDING
+  RESOLVED
+  DISMISSED
+}
+
 // ============================================================================
 // USERS & AUTH
 // ============================================================================
@@ -123,6 +137,7 @@ model User {
   wishlist      Wishlist?
   orders        Order[]
   reviews       Review[]
+  reviewReports ReviewReport[]
   notifications Notification[]
   refreshTokens RefreshToken[]
 
@@ -400,6 +415,7 @@ model Order {
   coupon  Coupon?     @relation(fields: [couponId], references: [id])
   items   OrderItem[]
   transactions Transaction[]
+  reviews Review[]
 
   @@index([userId])
   @@index([status])
@@ -458,11 +474,35 @@ model Review {
   updatedAt          DateTime     @updatedAt
   deletedAt          DateTime?
 
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order   Order?         @relation(fields: [orderId], references: [id])
+  reports ReviewReport[]
 
   @@unique([productId, userId])
   @@index([productId])
+  @@index([status])
+}
+
+/// A customer flagging another customer's review as spam/abusive/etc. Kept
+/// separate from Review.status (which reflects admin content moderation)
+/// since a report is itself just an unverified allegation until an admin
+/// triages it — reportStatus tracks that separate triage lifecycle.
+model ReviewReport {
+  id         String              @id @default(uuid())
+  reviewId   String
+  reporterId String
+  reason     ReviewReportReason
+  details    String?
+  status     ReviewReportStatus  @default(PENDING)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  review   Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  reporter User   @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@unique([reviewId, reporterId])
+  @@index([reviewId])
   @@index([status])
 }
 

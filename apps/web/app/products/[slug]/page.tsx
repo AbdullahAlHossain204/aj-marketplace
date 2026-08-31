@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { apiFetch } from "../../../lib/apiClient";
 import { ProductDetail, formatPrice } from "../../../lib/types";
 import { ProductActions } from "../../../components/ProductActions";
+import { ReviewForm } from "../../../components/ReviewForm";
+import { ReportReviewButton } from "../../../components/ReportReviewButton";
 
 export const dynamic = "force-dynamic";
 
@@ -53,9 +55,14 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
         </div>
       </div>
 
-      {product.reviews.length > 0 && (
-        <section className="mt-12">
-          <h2 className="mb-4 text-xl font-semibold">Customer Reviews</h2>
+      <section className="mt-12">
+        <h2 className="mb-4 text-xl font-semibold">Customer Reviews</h2>
+
+        <div className="mb-6 max-w-md">
+          <ReviewForm productId={product.id} />
+        </div>
+
+        {product.reviews.length > 0 && (
           <div className="flex flex-col gap-4">
             {product.reviews.map((review) => (
               <div key={review.id} className="rounded-lg border border-gray-200 p-4">
@@ -68,11 +75,14 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
                 )}
                 {review.title && <p className="mt-2 font-medium">{review.title}</p>}
                 {review.comment && <p className="mt-1 text-sm text-gray-700">{review.comment}</p>}
+                <div className="mt-2">
+                  <ReportReviewButton reviewId={review.id} />
+                </div>
               </div>
             ))}
           </div>
-        </section>
-      )}
+        )}
+      </section>
     </main>
   );
 }

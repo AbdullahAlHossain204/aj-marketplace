@@ -50,6 +50,19 @@ export interface ProductDetail {
   }[];
 }
 
+export interface Review {
+  id: string;
+  productId: string;
+  rating: number;
+  title: string | null;
+  comment: string | null;
+  isVerifiedPurchase: boolean;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  createdAt: string;
+}
+
+export type ReviewReportReason = "SPAM" | "ABUSIVE" | "OFFENSIVE" | "FAKE" | "OTHER";
+
 export interface Category {
   id: string;
   name: string;
@@ -116,6 +129,8 @@ export interface VendorDashboard {
   draftProductCount: number;
   totalStockUnits: number;
   lowStockVariants: number;
+  storeRating: number | null;
+  storeReviewCount: number;
   totalOrders: number;
   totalRevenue: number;
 }

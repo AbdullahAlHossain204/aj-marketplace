@@ -40,6 +40,10 @@ export default function VendorDashboardPage() {
     { label: "Stock Units", value: data.totalStockUnits },
     { label: "Low Stock Alerts", value: data.lowStockVariants },
     { label: "Total Orders", value: data.totalOrders },
+    {
+      label: "Store Rating",
+      value: data.storeRating !== null ? `★ ${data.storeRating.toFixed(1)} (${data.storeReviewCount})` : "No reviews yet",
+    },
   ];
 
   return (
