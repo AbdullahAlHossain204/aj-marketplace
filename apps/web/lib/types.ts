@@ -7,6 +7,7 @@ export interface ProductListItem {
   id: string;
   name: string;
   slug: string;
+  brand: string | null;
   price: number;
   currency: string;
   image: ProductImage | null;
@@ -30,6 +31,7 @@ export interface ProductDetail {
   id: string;
   name: string;
   slug: string;
+  brand: string | null;
   description: string | null;
   basePrice: number;
   currency: string;
@@ -149,6 +151,7 @@ export interface VendorProduct {
   name: string;
   slug: string;
   description: string | null;
+  brand: string | null;
   basePrice: number;
   currency: string;
   status: "DRAFT" | "ACTIVE" | "INACTIVE" | "ARCHIVED";
@@ -201,6 +204,11 @@ export interface TransactionView {
   providerRef: string | null;
   failureReason: string | null;
   createdAt: string;
+}
+
+export interface SearchSuggestions {
+  products: { id: string; name: string; slug: string }[];
+  categories: { id: string; name: string; slug: string }[];
 }
 
 export interface Pagination {

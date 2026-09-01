@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { apiFetch } from "../lib/apiClient";
 import { Category } from "../lib/types";
 
 export function ProductFilters({ categories }: { categories: Category[] }) {
@@ -11,6 +12,13 @@ export function ProductFilters({ categories }: { categories: Category[] }) {
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
   const [minPrice, setMinPrice] = useState(searchParams.get("minPrice") ?? "");
   const [maxPrice, setMaxPrice] = useState(searchParams.get("maxPrice") ?? "");
+  const [brands, setBrands] = useState<string[]>([]);
+
+  useEffect(() => {
+    apiFetch<string[]>("/api/v1/products/brands").then((res) => {
+      if (res.success && res.data) setBrands(res.data);
+    });
+  }, []);
 
   function applyParams(updates: Record<string, string | null>) {
     const params = new URLSearchParams(searchParams.toString());
@@ -57,6 +65,24 @@ export function ProductFilters({ categories }: { categories: Category[] }) {
         </select>
       </div>
 
+      {brands.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-medium text-gray-700">Brand</label>
+          <select
+            value={searchParams.get("brand") ?? ""}
+            onChange={(e) => applyParams({ brand: e.target.value || null })}
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+          >
+            <option value="">All brands</option>
+            {brands.map((b) => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <div className="flex flex-col gap-2">
         <label className="text-sm font-medium text-gray-700">Price range</label>
         <div className="flex items-center gap-2">
@@ -83,6 +109,30 @@ export function ProductFilters({ categories }: { categories: Category[] }) {
       </div>
 
       <div className="flex flex-col gap-2">
+        <label className="text-sm font-medium text-gray-700">Minimum rating</label>
+        <select
+          value={searchParams.get("minRating") ?? ""}
+          onChange={(e) => applyParams({ minRating: e.target.value || null })}
+          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+        >
+          <option value="">Any rating</option>
+          <option value="4">★ 4 & up</option>
+          <option value="3">★ 3 & up</option>
+          <option value="2">★ 2 & up</option>
+          <option value="1">★ 1 & up</option>
+        </select>
+      </div>
+
+      <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+        <input
+          type="checkbox"
+          checked={searchParams.get("inStock") === "true"}
+          onChange={(e) => applyParams({ inStock: e.target.checked ? "true" : null })}
+        />
+        In stock only
+      </label>
+
+      <div className="flex flex-col gap-2">
         <label className="text-sm font-medium text-gray-700">Sort by</label>
         <select
           value={searchParams.get("sort") ?? "newest"}
@@ -92,6 +142,7 @@ export function ProductFilters({ categories }: { categories: Category[] }) {
           <option value="newest">Newest</option>
           <option value="price_asc">Price: Low to High</option>
           <option value="price_desc">Price: High to Low</option>
+          <option value="rating_desc">Highest Rated</option>
         </select>
       </div>
     </div>

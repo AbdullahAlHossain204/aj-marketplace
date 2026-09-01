@@ -126,6 +126,7 @@ export async function createMyProduct(userId: string, input: CreateProductInput)
       name: input.name,
       slug: input.slug,
       description: input.description,
+      brand: input.brand,
       basePrice: input.basePrice,
       currency: input.currency,
       status: input.status,

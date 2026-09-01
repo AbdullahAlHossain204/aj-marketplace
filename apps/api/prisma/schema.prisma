@@ -231,18 +231,26 @@ model Category {
 }
 
 model Product {
-  id          String        @id @default(uuid())
-  storeId     String
-  categoryId  String
-  name        String
-  slug        String        @unique
-  description String?
-  basePrice   Int // smallest currency unit
-  currency    String        @default("BDT")
-  status      ProductStatus @default(DRAFT)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  deletedAt   DateTime?
+  id            String        @id @default(uuid())
+  storeId       String
+  categoryId    String
+  name          String
+  slug          String        @unique
+  description   String?
+  brand         String?
+  basePrice     Int // smallest currency unit
+  currency      String        @default("BDT")
+  status        ProductStatus @default(DRAFT)
+  /// Denormalized from approved Reviews, kept in sync by
+  /// reviews.service.ts#recomputeProductRating() on every review
+  /// create/update/delete/moderation. Exists so search can filter/sort by
+  /// rating at the database level — computing this on every listing query
+  /// via a live aggregate would be far more expensive at scale.
+  averageRating Float?
+  reviewCount   Int           @default(0)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime?
 
   store      Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
   category   Category         @relation(fields: [categoryId], references: [id])
@@ -257,6 +265,8 @@ model Product {
   @@index([categoryId])
   @@index([status])
   @@index([storeId, status])
+  @@index([brand])
+  @@index([averageRating])
 }
 
 model ProductImage {

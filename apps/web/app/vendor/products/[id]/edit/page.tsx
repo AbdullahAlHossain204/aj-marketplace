@@ -13,7 +13,7 @@ export default function EditVendorProductPage() {
 
   const [product, setProduct] = useState<VendorProduct | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [form, setForm] = useState({ name: "", description: "", basePrice: "", categoryId: "", status: "DRAFT" as string });
+  const [form, setForm] = useState({ name: "", description: "", brand: "", basePrice: "", categoryId: "", status: "DRAFT" as string });
   const [stockEdits, setStockEdits] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -28,6 +28,7 @@ export default function EditVendorProductPage() {
         setForm({
           name: res.data.name,
           description: res.data.description ?? "",
+          brand: res.data.brand ?? "",
           basePrice: String(res.data.basePrice / 100),
           categoryId: res.data.category.id,
           status: res.data.status,
@@ -50,6 +51,7 @@ export default function EditVendorProductPage() {
       body: JSON.stringify({
         name: form.name,
         description: form.description || undefined,
+        brand: form.brand || undefined,
         categoryId: form.categoryId,
         basePrice: Math.round(Number(form.basePrice) * 100),
         status: form.status,
@@ -120,6 +122,16 @@ export default function EditVendorProductPage() {
             rows={3}
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Brand (optional)</label>
+          <input
+            type="text"
+            value={form.brand}
+            onChange={(e) => setForm({ ...form, brand: e.target.value })}
             className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
           />
         </div>
