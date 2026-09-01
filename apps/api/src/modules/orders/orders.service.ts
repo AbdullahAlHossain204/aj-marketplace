@@ -182,15 +182,22 @@ export async function getOrder(userId: string, orderId: string) {
 const CANCELLABLE_STATUSES = new Set(["PENDING", "CONFIRMED"]);
 
 /**
- * Customer-initiated cancellation. Only items that haven't shipped yet can
- * be cancelled; their reserved stock is released back to inventory. If some
- * items are already past that point, they're left untouched and the order
- * ends up in a mixed state — reflected accurately rather than lying about it.
+ * Core cancellation logic, independent of who's allowed to invoke it.
+ * Cancels every item that hasn't shipped yet and releases its reserved
+ * stock. If some items are already past that point, they're left
+ * untouched and the order ends up in a mixed state — reflected accurately
+ * rather than lying about it. Refunds only when the ENTIRE order ends up
+ * cancelled and it was paid online (per-line-item proration on a partially
+ * cancelled multi-vendor order is a more advanced flow than this phase
+ * covers).
+ *
+ * Exported so the admin module (Phase 10) can reuse the exact same logic
+ * for dispute/fraud-driven cancellations, without either duplicating it or
+ * having to fake customer ownership to call the customer-facing function.
  */
-export async function cancelOrder(userId: string, orderId: string) {
+export async function performOrderCancellation(orderId: string) {
   const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true } });
   if (!order) throw new NotFoundError("Order");
-  if (order.userId !== userId) throw new ForbiddenError("This order does not belong to you");
 
   const cancellableItems = order.items.filter((i: any) => CANCELLABLE_STATUSES.has(i.status));
   if (cancellableItems.length === 0) {
@@ -214,16 +221,23 @@ export async function cancelOrder(userId: string, orderId: string) {
     });
   });
 
-  // Only refund when the ENTIRE order is cancelled and it was actually
-  // paid online — a partially-cancelled multi-vendor order (some items
-  // still shipping) isn't refunded automatically here; per-line-item
-  // proration is a more advanced flow than this phase covers.
   const refreshedOrder = await prisma.order.findUnique({ where: { id: orderId } });
   if (refreshedOrder.status === "CANCELLED" && refreshedOrder.paymentStatus === "PAID") {
     await refundOrder(orderId, refreshedOrder.paymentMethod, refreshedOrder.grandTotal, refreshedOrder.currency);
     await prisma.order.update({ where: { id: orderId }, data: { paymentStatus: "REFUNDED" } });
   }
 
+  return refreshedOrder;
+}
+
+/** Customer-initiated cancellation — ownership-checked wrapper around
+ * performOrderCancellation. */
+export async function cancelOrder(userId: string, orderId: string) {
+  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!order) throw new NotFoundError("Order");
+  if (order.userId !== userId) throw new ForbiddenError("This order does not belong to you");
+
+  await performOrderCancellation(orderId);
   return getOrder(userId, orderId);
 }
 

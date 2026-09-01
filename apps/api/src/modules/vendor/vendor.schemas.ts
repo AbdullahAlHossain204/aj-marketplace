@@ -36,7 +36,6 @@ export const createProductSchema = z.object({
     .max(200)
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Slug must be lowercase letters, numbers, and hyphens only"),
   description: z.string().max(5000).optional(),
-  brand: z.string().min(1).max(100).optional(),
   categoryId: z.string().uuid(),
   basePrice: z.number().int().min(0),
   currency: z.string().length(3).default("BDT"),
@@ -48,7 +47,6 @@ export const createProductSchema = z.object({
 export const updateProductSchema = z.object({
   name: z.string().min(2).max(200).optional(),
   description: z.string().max(5000).optional(),
-  brand: z.string().min(1).max(100).optional(),
   categoryId: z.string().uuid().optional(),
   basePrice: z.number().int().min(0).optional(),
   status: z.enum(["DRAFT", "ACTIVE", "INACTIVE", "ARCHIVED"]).optional(),

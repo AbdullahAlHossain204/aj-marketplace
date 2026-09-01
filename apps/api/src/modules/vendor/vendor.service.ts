@@ -126,7 +126,6 @@ export async function createMyProduct(userId: string, input: CreateProductInput)
       name: input.name,
       slug: input.slug,
       description: input.description,
-      brand: input.brand,
       basePrice: input.basePrice,
       currency: input.currency,
       status: input.status,
@@ -261,6 +260,18 @@ export async function getDashboardOverview(userId: string) {
   const storeRating =
     reviewAggregate?._avg.rating != null ? Math.round(reviewAggregate._avg.rating * 10) / 10 : null;
 
+  // Order/sales figures, scoped to this store's own line items (a single
+  // marketplace order can span multiple vendors — see OrderItem's comment
+  // on storeId denormalization). CANCELLED items are excluded from
+  // revenue; a not-yet-DELIVERED item still counts as an order but its
+  // lineTotal isn't "earned" revenue yet, so this is closer to gross
+  // bookings than recognized revenue — fine for a vendor-facing snapshot.
+  const orderItemAggregate = await prisma.orderItem.aggregate({
+    where: { storeId: store.id, status: { not: "CANCELLED" } },
+    _count: { id: true },
+    _sum: { lineTotal: true },
+  });
+
   return {
     store: { id: store.id, name: store.name, slug: store.slug, isActive: store.isActive },
     vendorStatus: profile.status,
@@ -271,9 +282,8 @@ export async function getDashboardOverview(userId: string) {
     lowStockVariants,
     storeRating,
     storeReviewCount: reviewAggregate?._count.rating ?? 0,
-    // Real order/sales figures land once the Order system (Phase 6) exists.
-    totalOrders: 0,
-    totalRevenue: 0,
+    totalOrders: orderItemAggregate._count.id,
+    totalRevenue: orderItemAggregate._sum.lineTotal ?? 0,
   };
 }
 

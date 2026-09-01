@@ -13,7 +13,6 @@ export default function NewVendorProductPage() {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
-  const [brand, setBrand] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [basePrice, setBasePrice] = useState("");
   const [imageUrl, setImageUrl] = useState("");
@@ -48,7 +47,6 @@ export default function NewVendorProductPage() {
         name,
         slug: slug || slugify(name),
         description: description || undefined,
-        brand: brand || undefined,
         categoryId,
         basePrice: Math.round(Number(basePrice) * 100),
         status,
@@ -119,17 +117,6 @@ export default function NewVendorProductPage() {
             rows={3}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
-          />
-        </div>
-
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Brand (optional)</label>
-          <input
-            type="text"
-            value={brand}
-            onChange={(e) => setBrand(e.target.value)}
-            placeholder="e.g. Samsung, Generic..."
             className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
           />
         </div>

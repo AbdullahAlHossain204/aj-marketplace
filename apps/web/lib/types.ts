@@ -7,7 +7,6 @@ export interface ProductListItem {
   id: string;
   name: string;
   slug: string;
-  brand: string | null;
   price: number;
   currency: string;
   image: ProductImage | null;
@@ -31,7 +30,6 @@ export interface ProductDetail {
   id: string;
   name: string;
   slug: string;
-  brand: string | null;
   description: string | null;
   basePrice: number;
   currency: string;
@@ -151,7 +149,6 @@ export interface VendorProduct {
   name: string;
   slug: string;
   description: string | null;
-  brand: string | null;
   basePrice: number;
   currency: string;
   status: "DRAFT" | "ACTIVE" | "INACTIVE" | "ARCHIVED";
@@ -206,9 +203,141 @@ export interface TransactionView {
   createdAt: string;
 }
 
-export interface SearchSuggestions {
-  products: { id: string; name: string; slug: string }[];
-  categories: { id: string; name: string; slug: string }[];
+// ---- ADMIN --------------------------------------------------------------
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  name: string;
+  phone: string | null;
+  role: "CUSTOMER" | "VENDOR" | "ADMIN";
+  isActive: boolean;
+  createdAt: string;
+  vendorProfile?: { status: string } | null;
+}
+
+export interface AdminVendor {
+  id: string;
+  businessName: string;
+  businessEmail: string;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "SUSPENDED";
+  approvedAt: string | null;
+  createdAt: string;
+  user: { id: string; name: string; email: string; isActive: boolean };
+  store: { id: string; name: string; slug: string; isActive: boolean } | null;
+}
+
+export interface AdminStore {
+  id: string;
+  name: string;
+  slug: string;
+  isActive: boolean;
+  vendorProfile: { id: string; status: string; businessName: string };
+  _count: { products: number };
+}
+
+export interface AdminProduct {
+  id: string;
+  name: string;
+  slug: string;
+  basePrice: number;
+  currency: string;
+  status: "DRAFT" | "ACTIVE" | "INACTIVE" | "ARCHIVED";
+  createdAt: string;
+  store: { id: string; name: string; slug: string };
+  category: { name: string; slug: string };
+  images: { url: string }[];
+}
+
+export interface AdminCategory {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  imageUrl: string | null;
+  parentId: string | null;
+  isActive: boolean;
+  parent: { id: string; name: string; slug: string } | null;
+  _count: { products: number; children: number };
+}
+
+export interface AdminOrderSummary {
+  id: string;
+  orderNumber: string;
+  status: string;
+  paymentStatus: string;
+  grandTotal: number;
+  currency: string;
+  createdAt: string;
+  user: { id: string; name: string; email: string };
+  items: { id: string; storeId: string; productNameSnapshot: string; status: string }[];
+}
+
+export interface AdminReviewForModeration {
+  id: string;
+  rating: number;
+  title: string | null;
+  comment: string | null;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  isVerifiedPurchase: boolean;
+  createdAt: string;
+  user: { id: string; name: string; email: string };
+  product: { id: string; name: string; slug: string };
+}
+
+export interface AdminReviewReport {
+  id: string;
+  reason: string;
+  details: string | null;
+  status: "PENDING" | "RESOLVED" | "DISMISSED";
+  createdAt: string;
+  reporter: { id: string; name: string; email: string };
+  review: {
+    id: string;
+    rating: number;
+    title: string | null;
+    comment: string | null;
+    status: string;
+    user: { name: string };
+    product: { id: string; name: string; slug: string };
+  };
+}
+
+export interface AdminCoupon {
+  id: string;
+  code: string;
+  description: string | null;
+  discountType: "PERCENTAGE" | "FIXED";
+  discountValue: number;
+  minOrderAmount: number | null;
+  maxDiscountAmount: number | null;
+  usageLimit: number | null;
+  usedCount: number;
+  startsAt: string | null;
+  expiresAt: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface PlatformOverview {
+  users: { total: number; customers: number; vendors: number; admins: number };
+  vendors: { pendingApproval: number };
+  stores: { total: number; active: number };
+  products: { total: number; active: number };
+  orders: { total: number };
+  reviews: { total: number; pendingModeration: number };
+  reports: { pendingTriage: number };
+  promotions: { active: number };
+}
+
+export interface RevenueOverview {
+  grossRevenue: number;
+  totalRefunded: number;
+  netRevenue: number;
+  orderCount: number;
+  averageOrderValue: number;
+  windowDays: number;
+  series: { date: string; revenue: number }[];
 }
 
 export interface Pagination {

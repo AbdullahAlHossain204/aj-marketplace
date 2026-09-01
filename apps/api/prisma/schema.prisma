@@ -140,6 +140,7 @@ model User {
   reviewReports ReviewReport[]
   notifications Notification[]
   refreshTokens RefreshToken[]
+  adminAuditLogs AdminAuditLog[]
 
   @@index([role])
   @@index([email])
@@ -231,26 +232,18 @@ model Category {
 }
 
 model Product {
-  id            String        @id @default(uuid())
-  storeId       String
-  categoryId    String
-  name          String
-  slug          String        @unique
-  description   String?
-  brand         String?
-  basePrice     Int // smallest currency unit
-  currency      String        @default("BDT")
-  status        ProductStatus @default(DRAFT)
-  /// Denormalized from approved Reviews, kept in sync by
-  /// reviews.service.ts#recomputeProductRating() on every review
-  /// create/update/delete/moderation. Exists so search can filter/sort by
-  /// rating at the database level — computing this on every listing query
-  /// via a live aggregate would be far more expensive at scale.
-  averageRating Float?
-  reviewCount   Int           @default(0)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  deletedAt     DateTime?
+  id          String        @id @default(uuid())
+  storeId     String
+  categoryId  String
+  name        String
+  slug        String        @unique
+  description String?
+  basePrice   Int // smallest currency unit
+  currency    String        @default("BDT")
+  status      ProductStatus @default(DRAFT)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  deletedAt   DateTime?
 
   store      Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
   category   Category         @relation(fields: [categoryId], references: [id])
@@ -265,8 +258,6 @@ model Product {
   @@index([categoryId])
   @@index([status])
   @@index([storeId, status])
-  @@index([brand])
-  @@index([averageRating])
 }
 
 model ProductImage {
@@ -569,8 +560,28 @@ model Transaction {
 }
 
 // ============================================================================
-// NOTIFICATIONS
+// ADMIN AUDIT LOG
 // ============================================================================
+
+/// One row per state-changing admin action (approvals, suspensions, status
+/// overrides, moderation, promotions). Exists so every admin action is
+/// attributable after the fact — "strict authorization" here means not
+/// just gating who *can* act, but keeping a record of who *did*.
+model AdminAuditLog {
+  id         String   @id @default(uuid())
+  adminId    String
+  action     String // e.g. "VENDOR_STATUS_CHANGE", "USER_SUSPEND", "PRODUCT_STATUS_OVERRIDE"
+  targetType String // e.g. "VendorProfile", "User", "Product", "Coupon"
+  targetId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  admin User @relation(fields: [adminId], references: [id])
+
+  @@index([adminId])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+}
 
 model Notification {
   id        String            @id @default(uuid())

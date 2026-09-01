@@ -21,10 +21,7 @@ export function ProductCard({ product }: { product: ProductListItem }) {
       </div>
 
       <div className="flex flex-1 flex-col gap-1 p-3">
-        <span className="text-xs text-gray-500">
-          {product.brand ? `${product.brand} · ` : ""}
-          {product.store.name}
-        </span>
+        <span className="text-xs text-gray-500">{product.store.name}</span>
         <h3 className="line-clamp-2 text-sm font-medium text-gray-900">{product.name}</h3>
 
         <div className="mt-auto flex items-center justify-between pt-2">
