@@ -2,6 +2,7 @@ import { prisma } from "../../../lib/prisma";
 import { NotFoundError } from "../../../lib/errors";
 import { AdminVendorListQuery } from "../admin.schemas";
 import { recordAuditLog } from "./audit.service";
+import { notifyVendorStatusChanged } from "../../notifications/notifications.service";
 
 export async function listVendors(query: AdminVendorListQuery) {
   const where = {
@@ -74,6 +75,11 @@ export async function setVendorStatus(adminId: string, vendorProfileId: string, 
     from: profile.status,
     to: status,
   });
+
+  // notifyVendorStatusChanged no-ops for any status other than
+  // APPROVED/REJECTED/SUSPENDED (e.g. a bounce back to PENDING) — see its
+  // doc comment in notifications.service.ts.
+  await notifyVendorStatusChanged(profile.userId, status, updated.businessName);
 
   return updated;
 }

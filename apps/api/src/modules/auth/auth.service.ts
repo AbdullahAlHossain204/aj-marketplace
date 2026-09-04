@@ -10,6 +10,7 @@ import {
 import { env } from "../../config/env";
 import { Role, VendorStatus } from "@prisma/client";
 import { LoginInput, RegisterInput } from "./auth.schemas";
+import { notifyAdminNewVendorApplication, notifyWelcome } from "../notifications/notifications.service";
 
 interface AuthResult {
   accessToken: string;
@@ -69,7 +70,17 @@ export async function register(input: RegisterInput): Promise<AuthResult> {
         },
       }),
     },
+    include: { vendorProfile: true },
   });
+
+  // Fire-and-forget from the caller's perspective — notifyWelcome/
+  // notifyAdminNewVendorApplication never throw (see notifications.
+  // service.ts#dispatch's per-channel error isolation), so a notification
+  // hiccup can never fail registration itself.
+  await notifyWelcome({ id: user.id, name: user.name });
+  if (user.vendorProfile) {
+    await notifyAdminNewVendorApplication(user.vendorProfile.id, user.vendorProfile.businessName);
+  }
 
   const { accessToken, refreshToken } = await issueTokenPair(user.id, user.role);
 

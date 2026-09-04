@@ -3,6 +3,13 @@ import { prisma } from "../../lib/prisma";
 import { AppError, ForbiddenError, NotFoundError } from "../../lib/errors";
 import { CheckoutInput, OrderListQuery } from "./orders.schemas";
 import { chargeForCheckout, recordTransaction, refundFailedCheckout, refundOrder, listOrderTransactions } from "../payments/payments.service";
+import {
+  notifyLowStock,
+  notifyOrderCancelled,
+  notifyOrderPlaced,
+  notifyOrderStatusChanged,
+  notifyVendorsOfNewOrder,
+} from "../notifications/notifications.service";
 import { logger } from "../../lib/logger";
 
 // Flat shipping fee per order (smallest currency unit). Real per-vendor or
@@ -86,6 +93,19 @@ export async function checkout(userId: string, input: CheckoutInput) {
   // the customer can simply retry.
   const chargeResult = await chargeForCheckout(input.paymentMethod, orderNumber, grandTotal, "BDT");
 
+  // Populated inside the transaction below (variant/threshold comparisons
+  // only, no I/O) and only acted on — dispatching notifications — after
+  // the transaction commits. Notification sends are no different from
+  // payment gateway calls in this respect: I/O that can be slow must never
+  // happen while a DB transaction holds its connection/locks open.
+  const lowStockAlerts: Array<{
+    storeId: string;
+    productName: string;
+    variantName: string;
+    remaining: number;
+    threshold: number;
+  }> = [];
+
   let order;
   try {
     order = await prisma.$transaction(async (tx: any) => {
@@ -97,6 +117,24 @@ export async function checkout(userId: string, input: CheckoutInput) {
         });
         if (result.count === 0) {
           throw new AppError(`Insufficient stock for "${item.productNameSnapshot}"`, 409);
+        }
+
+        // Check where the atomic decrement landed relative to this
+        // variant's low-stock threshold, right after it succeeds — this is
+        // the one place in the codebase that reliably observes every
+        // stock-decreasing event (see the phase prompt's rationale for
+        // putting the check here rather than as a periodic scan).
+        const inventory = await tx.inventoryRecord.findUnique({
+          where: { productVariantId: item.productVariantId },
+        });
+        if (inventory && inventory.quantity <= inventory.lowStockThreshold) {
+          lowStockAlerts.push({
+            storeId: item.storeId,
+            productName: item.productNameSnapshot,
+            variantName: item.variantNameSnapshot,
+            remaining: inventory.quantity,
+            threshold: inventory.lowStockThreshold,
+          });
         }
       }
 
@@ -144,6 +182,31 @@ export async function checkout(userId: string, input: CheckoutInput) {
   }
 
   await recordTransaction(order.id, input.paymentMethod, chargeResult, grandTotal, "BDT");
+
+  // Notification dispatch happens last and after everything else has
+  // committed — see notifications.service.ts#dispatch for why a
+  // notification failure is caught there and never allowed to fail
+  // checkout itself.
+  await notifyOrderPlaced({ id: order.id, orderNumber: order.orderNumber, userId });
+  await notifyVendorsOfNewOrder(
+    { id: order.id, orderNumber: order.orderNumber },
+    lineItems.map((i) => i.storeId)
+  );
+  for (const alert of lowStockAlerts) {
+    const store = await prisma.store.findUnique({
+      where: { id: alert.storeId },
+      select: { vendorProfile: { select: { userId: true } } },
+    });
+    if (store) {
+      await notifyLowStock({
+        vendorUserId: store.vendorProfile.userId,
+        productName: alert.productName,
+        variantName: alert.variantName,
+        remaining: alert.remaining,
+        threshold: alert.threshold,
+      });
+    }
+  }
 
   return order;
 }
@@ -226,6 +289,13 @@ export async function performOrderCancellation(orderId: string) {
     await refundOrder(orderId, refreshedOrder.paymentMethod, refreshedOrder.grandTotal, refreshedOrder.currency);
     await prisma.order.update({ where: { id: orderId }, data: { paymentStatus: "REFUNDED" } });
   }
+
+  await notifyOrderCancelled({
+    userId: order.userId,
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    itemCount: cancellableItems.length,
+  });
 
   return refreshedOrder;
 }

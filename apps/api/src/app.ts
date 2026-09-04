@@ -18,6 +18,7 @@ import { addressesRouter } from "./modules/addresses/addresses.routes";
 import { vendorRouter } from "./modules/vendor/vendor.routes";
 import { ordersRouter } from "./modules/orders/orders.routes";
 import { reviewsRouter } from "./modules/reviews/reviews.routes";
+import { notificationsRouter } from "./modules/notifications/notifications.routes";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
 
 export function createApp(): Application {
@@ -66,6 +67,7 @@ export function createApp(): Application {
   app.use("/api/v1/vendor", vendorRouter);
   app.use("/api/v1/orders", ordersRouter);
   app.use("/api/v1/reviews", reviewsRouter);
+  app.use("/api/v1/notifications", notificationsRouter);
 
   // 404 + error handling — must be registered last, in this order.
   app.use(notFoundHandler);

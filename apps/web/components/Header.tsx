@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "../lib/AuthContext";
 import { CartView } from "../lib/types";
+import { NotificationBell } from "./NotificationBell";
 
 export function Header() {
   const { user, isLoading, logout, authFetch } = useAuth();
@@ -68,6 +69,8 @@ export function Header() {
               </Link>
             </>
           )}
+
+          <NotificationBell />
 
           {!isLoading && !user && (
             <>

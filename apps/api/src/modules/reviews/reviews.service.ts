@@ -1,6 +1,7 @@
 import { prisma } from "../../lib/prisma";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors";
 import { CreateReviewInput, ReportReviewInput, UpdateReviewInput } from "./reviews.schemas";
+import { notifyAdminNewReviewReport } from "../notifications/notifications.service";
 
 /**
  * A review is "verified" only when the reviewer has an OrderItem for this
@@ -124,6 +125,8 @@ export async function reportReview(userId: string, reviewId: string, input: Repo
       status: "PENDING",
     },
   });
+
+  await notifyAdminNewReviewReport(report.id, reviewId);
 
   return report;
 }

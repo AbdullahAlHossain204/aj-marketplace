@@ -347,6 +347,19 @@ export interface Pagination {
   totalPages: number;
 }
 
+export type NotificationType = "ORDER" | "ACCOUNT" | "VENDOR" | "ADMIN" | "STOCK" | "PROMOTION";
+
+export interface Notification {
+  id: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  isRead: boolean;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+
 /** Formats an integer amount in the smallest currency unit (e.g. paisa) as
  * a human-readable price string, e.g. 250000 -> "৳2,500.00" for BDT. */
 export function formatPrice(amount: number, currency: string): string {

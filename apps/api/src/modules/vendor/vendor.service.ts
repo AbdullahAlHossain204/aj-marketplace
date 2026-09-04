@@ -1,5 +1,6 @@
 import { prisma } from "../../lib/prisma";
 import { AppError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors";
+import { notifyOrderStatusChanged } from "../notifications/notifications.service";
 import {
   AddImageInput,
   CreateProductInput,
@@ -329,9 +330,23 @@ export async function updateOrderItemStatus(userId: string, orderItemId: string,
   // (some vendors further along than others), shown as PROCESSING.
   const siblings = await prisma.orderItem.findMany({ where: { orderId: item.orderId } });
   const allSameStatus = siblings.every((i: any) => i.status === newStatus);
-  await prisma.order.update({
+  const order = await prisma.order.update({
     where: { id: item.orderId },
     data: { status: allSameStatus ? newStatus : "PROCESSING" },
+  });
+
+  // Note: a vendor-initiated CANCELLED transition here is a distinct event
+  // from customer/admin-initiated cancellation (orders.service.ts#
+  // performOrderCancellation, which sends its own ORDER_CANCELLED
+  // notification and releases stock) — this is a single line item, vendor
+  // decides, no stock release logic lives on this path. Both are worth
+  // their own signal, so this fires unconditionally for every transition.
+  await notifyOrderStatusChanged({
+    userId: order.userId,
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    productName: updated.productNameSnapshot,
+    newStatus,
   });
 
   return updated;
