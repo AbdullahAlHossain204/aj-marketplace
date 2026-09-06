@@ -1,6 +1,7 @@
 import { prisma } from "../../lib/prisma";
 import { AppError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors";
 import { notifyOrderStatusChanged } from "../notifications/notifications.service";
+import { recordStatusEvent } from "../delivery/delivery.service";
 import {
   AddImageInput,
   CreateProductInput,
@@ -323,7 +324,16 @@ export async function updateOrderItemStatus(userId: string, orderItemId: string,
     throw new AppError(`Cannot move an order item from ${item.status} to ${newStatus}`, 409);
   }
 
-  const updated = await prisma.orderItem.update({ where: { id: orderItemId }, data: { status: newStatus } });
+  const stamps: { shippedAt?: Date; deliveredAt?: Date } = {};
+  if (newStatus === "SHIPPED") stamps.shippedAt = new Date();
+  if (newStatus === "DELIVERED") stamps.deliveredAt = new Date();
+
+  const updated = await prisma.orderItem.update({
+    where: { id: orderItemId },
+    data: { status: newStatus, ...stamps },
+  });
+
+  await recordStatusEvent(orderItemId, newStatus);
 
   // Recompute the parent order's overall status: if every item now shares
   // the same status, reflect that; otherwise the order is in a mixed state

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "../../../lib/AuthContext";
-import { OrderView, TransactionView, formatPrice } from "../../../lib/types";
+import { OrderView, TransactionView, OrderTimelineEntry, formatPrice } from "../../../lib/types";
 
 const statusColors: Record<string, string> = {
   PENDING: "bg-yellow-50 text-yellow-700",
@@ -22,6 +22,7 @@ export default function OrderDetailPage() {
   const params = useParams<{ id: string }>();
   const [order, setOrder] = useState<OrderView | null>(null);
   const [transactions, setTransactions] = useState<TransactionView[]>([]);
+  const [timeline, setTimeline] = useState<OrderTimelineEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
 
@@ -42,6 +43,9 @@ export default function OrderDetailPage() {
 
     const txRes = await authFetch<TransactionView[]>(`/api/v1/orders/${params.id}/transactions`);
     if (txRes.success && txRes.data) setTransactions(txRes.data);
+
+    const timelineRes = await authFetch<OrderTimelineEntry[]>(`/api/v1/orders/${params.id}/timeline`);
+    if (timelineRes.success && timelineRes.data) setTimeline(timelineRes.data);
   }
 
   async function handleCancel() {
@@ -76,24 +80,54 @@ export default function OrderDetailPage() {
       </div>
 
       <div className="mb-6 rounded-lg border border-gray-200 bg-white p-6">
-        <h2 className="mb-3 font-semibold">Items</h2>
-        <div className="flex flex-col gap-3">
-          {order.items.map((item) => (
-            <div key={item.id} className="flex items-center justify-between border-b border-gray-100 pb-3 last:border-0 last:pb-0">
-              <div>
-                <p className="font-medium">{item.productNameSnapshot}</p>
-                <p className="text-sm text-gray-500">
-                  {item.variantNameSnapshot} × {item.quantity}
-                </p>
+        <h2 className="mb-3 font-semibold">Items &amp; Tracking</h2>
+        <div className="flex flex-col gap-4">
+          {order.items.map((item) => {
+            const itemTimeline = timeline.find((t) => t.orderItemId === item.id);
+            return (
+              <div key={item.id} className="border-b border-gray-100 pb-4 last:border-0 last:pb-0">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">{item.productNameSnapshot}</p>
+                    <p className="text-sm text-gray-500">
+                      {item.variantNameSnapshot} × {item.quantity}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-medium">{formatPrice(item.lineTotal, order.currency)}</p>
+                    <span className={`rounded px-2 py-0.5 text-xs font-medium ${statusColors[item.status]}`}>
+                      {item.status}
+                    </span>
+                  </div>
+                </div>
+
+                {(item.trackingNumber || item.estimatedDeliveryAt) && (
+                  <div className="mt-2 rounded-md bg-gray-50 p-2 text-xs text-gray-600">
+                    {item.trackingNumber && (
+                      <p>
+                        Tracking: <span className="font-medium">{item.carrier ?? "Carrier"} · {item.trackingNumber}</span>
+                      </p>
+                    )}
+                    {item.estimatedDeliveryAt && !item.deliveredAt && (
+                      <p>Estimated delivery: {new Date(item.estimatedDeliveryAt).toLocaleDateString()}</p>
+                    )}
+                    {item.deliveredAt && <p>Delivered {new Date(item.deliveredAt).toLocaleString()}</p>}
+                  </div>
+                )}
+
+                {itemTimeline && itemTimeline.timeline.length > 0 && (
+                  <ol className="mt-2 flex flex-col gap-1 border-l-2 border-gray-200 pl-3 text-xs text-gray-500">
+                    {itemTimeline.timeline.map((event, i) => (
+                      <li key={i}>
+                        <span className="font-medium text-gray-700">{event.status}</span> —{" "}
+                        {new Date(event.at).toLocaleString()}
+                      </li>
+                    ))}
+                  </ol>
+                )}
               </div>
-              <div className="text-right">
-                <p className="font-medium">{formatPrice(item.lineTotal, order.currency)}</p>
-                <span className={`rounded px-2 py-0.5 text-xs font-medium ${statusColors[item.status]}`}>
-                  {item.status}
-                </span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

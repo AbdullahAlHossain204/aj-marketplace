@@ -232,18 +232,31 @@ model Category {
 }
 
 model Product {
-  id          String        @id @default(uuid())
-  storeId     String
-  categoryId  String
-  name        String
-  slug        String        @unique
-  description String?
-  basePrice   Int // smallest currency unit
-  currency    String        @default("BDT")
-  status      ProductStatus @default(DRAFT)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  deletedAt   DateTime?
+  id            String        @id @default(uuid())
+  storeId       String
+  categoryId    String
+  name          String
+  slug          String        @unique
+  description   String?
+  brand         String?
+  basePrice     Int // smallest currency unit
+  /// Optional "was" price shown struck through next to basePrice, e.g.
+  /// "was ৳1,000, now ৳800". Vendor-controlled, always-on if set (no time
+  /// window) — for time-boxed campaign discounts see FlashSale instead,
+  /// which computes its discount live rather than storing it on Product.
+  compareAtPrice Int?
+  currency      String        @default("BDT")
+  status        ProductStatus @default(DRAFT)
+  /// Denormalized from approved Reviews, kept in sync by
+  /// reviews.service.ts#recomputeProductRating() on every review
+  /// create/update/delete/moderation. Exists so search can filter/sort by
+  /// rating at the database level — computing this on every listing query
+  /// via a live aggregate would be far more expensive at scale.
+  averageRating Float?
+  reviewCount   Int           @default(0)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime?
 
   store      Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
   category   Category         @relation(fields: [categoryId], references: [id])
@@ -253,11 +266,15 @@ model Product {
   wishlisted WishlistItem[]
   orderItems OrderItem[]
   reviews    Review[]
+  flashSaleEntries FlashSaleProduct[]
+  featuredEntry    FeaturedProduct?
 
   @@index([storeId])
   @@index([categoryId])
   @@index([status])
   @@index([storeId, status])
+  @@index([brand])
+  @@index([averageRating])
 }
 
 model ProductImage {
@@ -441,6 +458,17 @@ model OrderItem {
   quantity               Int
   lineTotal              Int
   status                 OrderStatus @default(PENDING)
+  /// Shipping/tracking fields — set by the vendor via
+  /// delivery.service.ts#setShippingInfo, independent of the status
+  /// transition itself (a vendor may add tracking info before or exactly
+  /// when marking the item SHIPPED). shippedAt/deliveredAt are stamped
+  /// automatically the moment status crosses into SHIPPED/DELIVERED —
+  /// see vendor.service.ts#updateOrderItemStatus.
+  carrier                String?
+  trackingNumber         String?
+  estimatedDeliveryAt    DateTime?
+  shippedAt              DateTime?
+  deliveredAt            DateTime?
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
@@ -448,10 +476,27 @@ model OrderItem {
   store          Store          @relation(fields: [storeId], references: [id])
   product        Product        @relation(fields: [productId], references: [id])
   productVariant ProductVariant @relation(fields: [productVariantId], references: [id])
+  statusEvents   OrderStatusEvent[]
 
   @@index([orderId])
   @@index([storeId])
   @@index([storeId, status])
+}
+
+/// The order timeline the spec asks for. One row per status transition, so
+/// "when did this move from PROCESSING to SHIPPED" is an actual queryable
+/// fact rather than something only inferable from OrderItem.updatedAt
+/// (which gets overwritten on every change and can't hold history).
+model OrderStatusEvent {
+  id          String      @id @default(uuid())
+  orderItemId String
+  status      OrderStatus
+  note        String?
+  createdAt   DateTime    @default(now())
+
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@index([orderItemId])
 }
 
 // ============================================================================
@@ -534,6 +579,85 @@ model Coupon {
 }
 
 // ============================================================================
+// MARKETING (Phase 11): flash sales, banners, featured placement
+// ============================================================================
+
+enum BannerPlacement {
+  HOMEPAGE_HERO
+  HOMEPAGE_SECONDARY
+  CATEGORY_TOP
+}
+
+/// A time-boxed, platform-curated discount campaign spanning multiple
+/// products. Unlike Product.compareAtPrice (an always-on vendor-set "was"
+/// price), the discount here is computed live against basePrice whenever
+/// `isActive && startsAt <= now <= endsAt` — so editing discountValue
+/// instantly re-prices every included product without touching them.
+model FlashSale {
+  id            String       @id @default(uuid())
+  name          String
+  description   String?
+  discountType  DiscountType
+  discountValue Int // percentage (0-100) or fixed amount in smallest unit
+  startsAt      DateTime
+  endsAt        DateTime
+  isActive      Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  products FlashSaleProduct[]
+
+  @@index([isActive])
+  @@index([startsAt, endsAt])
+}
+
+model FlashSaleProduct {
+  id          String   @id @default(uuid())
+  flashSaleId String
+  productId   String
+  addedAt     DateTime @default(now())
+
+  flashSale FlashSale @relation(fields: [flashSaleId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([flashSaleId, productId])
+  @@index([productId])
+}
+
+/// Admin-curated homepage/category promotional imagery — deliberately
+/// separate from Product so marketing placement never depends on a
+/// vendor's own edit permissions.
+model Banner {
+  id           String          @id @default(uuid())
+  title        String
+  imageUrl     String
+  linkUrl      String?
+  placement    BannerPlacement
+  displayOrder Int             @default(0)
+  isActive     Boolean         @default(true)
+  startsAt     DateTime?
+  endsAt       DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([placement, isActive])
+}
+
+/// Admin-curated homepage "Featured" rail. A join model (rather than a
+/// boolean flag on Product) so ordering and add/remove are managed
+/// independently of a vendor's own product edits, matching the FlashSale/
+/// Banner pattern of keeping marketing curation decoupled from catalog CRUD.
+model FeaturedProduct {
+  id           String   @id @default(uuid())
+  productId    String   @unique
+  displayOrder Int      @default(0)
+  addedAt      DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([displayOrder])
+}
+
 // ============================================================================
 // PAYMENTS
 // ============================================================================

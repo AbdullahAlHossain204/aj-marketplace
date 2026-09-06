@@ -3,6 +3,7 @@ import { asyncHandler } from "../../lib/asyncHandler";
 import { UnauthorizedError } from "../../lib/errors";
 import { checkoutSchema, orderListQuerySchema } from "./orders.schemas";
 import * as ordersService from "./orders.service";
+import * as deliveryService from "../delivery/delivery.service";
 
 function uid(req: Request): string {
   if (!req.user) throw new UnauthorizedError();
@@ -34,4 +35,9 @@ export const cancelOrderHandler = asyncHandler(async (req: Request, res: Respons
 export const getOrderTransactionsHandler = asyncHandler(async (req: Request, res: Response) => {
   const transactions = await ordersService.getOrderTransactions(uid(req), req.params.id);
   res.json({ success: true, data: transactions, error: null });
+});
+
+export const getOrderTimelineHandler = asyncHandler(async (req: Request, res: Response) => {
+  const timeline = await deliveryService.getOrderTimeline(uid(req), req.params.id);
+  res.json({ success: true, data: timeline, error: null });
 });

@@ -1,20 +1,25 @@
 import { notFound } from "next/navigation";
 import { apiFetch } from "../../../lib/apiClient";
-import { ProductDetail, formatPrice } from "../../../lib/types";
+import { ProductDetail, ProductListItem, formatPrice } from "../../../lib/types";
 import { ProductActions } from "../../../components/ProductActions";
 import { ReviewForm } from "../../../components/ReviewForm";
 import { ReportReviewButton } from "../../../components/ReportReviewButton";
+import { ProductCard } from "../../../components/ProductCard";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProductDetailPage({ params }: { params: { slug: string } }) {
-  const res = await apiFetch<ProductDetail>(`/api/v1/products/${params.slug}`);
+  const [res, recommendedRes] = await Promise.all([
+    apiFetch<ProductDetail>(`/api/v1/products/${params.slug}`),
+    apiFetch<ProductListItem[]>(`/api/v1/products/${params.slug}/recommendations`),
+  ]);
 
   if (!res.success || !res.data) {
     notFound();
   }
 
   const product = res.data;
+  const recommended = recommendedRes.data ?? [];
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
@@ -45,8 +50,18 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
             )}
           </div>
 
-          <p className="text-3xl font-bold text-brand-600">
-            {formatPrice(product.basePrice, product.currency)}
+          <p className="flex items-baseline gap-2">
+            <span className="text-3xl font-bold text-brand-600">
+              {formatPrice(product.basePrice, product.currency)}
+            </span>
+            {product.compareAtPrice && (
+              <span className="text-lg text-gray-400 line-through">
+                {formatPrice(product.compareAtPrice, product.currency)}
+              </span>
+            )}
+            {product.flashSale && (
+              <span className="rounded bg-red-600 px-2 py-0.5 text-xs font-bold text-white">FLASH SALE</span>
+            )}
           </p>
 
           {product.description && <p className="text-gray-700">{product.description}</p>}
@@ -83,6 +98,17 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
           </div>
         )}
       </section>
+
+      {recommended.length > 0 && (
+        <section className="mt-12">
+          <h2 className="mb-4 text-xl font-semibold">You May Also Like</h2>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            {recommended.map((p) => (
+              <ProductCard key={p.id} product={p} />
+            ))}
+          </div>
+        </section>
+      )}
     </main>
   );
 }

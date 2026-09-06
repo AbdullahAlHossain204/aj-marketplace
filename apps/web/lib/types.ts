@@ -3,11 +3,22 @@ export interface ProductImage {
   altText?: string | null;
 }
 
+export interface ActiveFlashSaleInfo {
+  id: string;
+  name: string;
+  discountType: "PERCENTAGE" | "FIXED";
+  discountValue: number;
+  endsAt: string;
+}
+
 export interface ProductListItem {
   id: string;
   name: string;
   slug: string;
+  brand: string | null;
   price: number;
+  compareAtPrice: number | null;
+  flashSale: ActiveFlashSaleInfo | null;
   currency: string;
   image: ProductImage | null;
   store: { name: string; slug: string };
@@ -30,8 +41,11 @@ export interface ProductDetail {
   id: string;
   name: string;
   slug: string;
+  brand: string | null;
   description: string | null;
   basePrice: number;
+  compareAtPrice: number | null;
+  flashSale: ActiveFlashSaleInfo | null;
   currency: string;
   category: { id: string; name: string; slug: string };
   store: { id: string; name: string; slug: string; logoUrl: string | null };
@@ -77,6 +91,7 @@ export interface CartItemView {
   unitPrice: number;
   lineTotal: number;
   currency: string;
+  onSale: boolean;
   product: { id: string; name: string; slug: string; image: string | null };
   variant: { id: string; name: string };
   available: number;
@@ -169,8 +184,24 @@ export interface OrderItemView {
   quantity: number;
   lineTotal: number;
   status: "PENDING" | "CONFIRMED" | "PROCESSING" | "SHIPPED" | "DELIVERED" | "CANCELLED";
+  carrier: string | null;
+  trackingNumber: string | null;
+  estimatedDeliveryAt: string | null;
+  shippedAt: string | null;
+  deliveredAt: string | null;
   createdAt: string;
   order?: { orderNumber: string; createdAt: string; paymentMethod: string; paymentStatus: string };
+}
+
+export interface OrderTimelineEntry {
+  orderItemId: string;
+  productName: string;
+  carrier: string | null;
+  trackingNumber: string | null;
+  estimatedDeliveryAt: string | null;
+  shippedAt: string | null;
+  deliveredAt: string | null;
+  timeline: { status: string; note: string | null; at: string }[];
 }
 
 export interface OrderView {
@@ -317,6 +348,62 @@ export interface AdminCoupon {
   expiresAt: string | null;
   isActive: boolean;
   createdAt: string;
+}
+
+export interface AdminFlashSale {
+  id: string;
+  name: string;
+  description: string | null;
+  discountType: "PERCENTAGE" | "FIXED";
+  discountValue: number;
+  startsAt: string;
+  endsAt: string;
+  isActive: boolean;
+  products: { product: { id: string; name: string; slug: string } }[];
+}
+
+export interface AdminBanner {
+  id: string;
+  title: string;
+  imageUrl: string;
+  linkUrl: string | null;
+  placement: "HOMEPAGE_HERO" | "HOMEPAGE_SECONDARY" | "CATEGORY_TOP";
+  displayOrder: number;
+  isActive: boolean;
+  startsAt: string | null;
+  endsAt: string | null;
+}
+
+export interface AdminFeaturedProduct {
+  id: string;
+  productId: string;
+  displayOrder: number;
+  product: { id: string; name: string; slug: string; basePrice: number; currency: string; status: string; images: { url: string }[] };
+}
+
+export interface HomepageFlashSale {
+  id: string;
+  name: string;
+  discountType: "PERCENTAGE" | "FIXED";
+  discountValue: number;
+  endsAt: string;
+  products: {
+    product: {
+      id: string;
+      name: string;
+      slug: string;
+      basePrice: number;
+      currency: string;
+      images: { url: string }[];
+    };
+  }[];
+}
+
+export interface HomepageData {
+  banners: AdminBanner[];
+  flashSale: HomepageFlashSale | null;
+  featured: AdminFeaturedProduct[];
+  newArrivals: ProductListItem[];
 }
 
 export interface PlatformOverview {

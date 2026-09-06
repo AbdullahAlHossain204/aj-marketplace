@@ -12,6 +12,8 @@ import {
   updateStoreSchema,
 } from "./vendor.schemas";
 import { updateOrderItemStatusSchema } from "../orders/orders.schemas";
+import * as deliveryService from "../delivery/delivery.service";
+import { setShippingInfoSchema } from "../delivery/delivery.schemas";
 
 function uid(req: Request): string {
   if (!req.user) throw new UnauthorizedError();
@@ -93,5 +95,11 @@ export const listOrdersHandler = asyncHandler(async (req: Request, res: Response
 export const updateOrderItemStatusHandler = asyncHandler(async (req: Request, res: Response) => {
   const input = updateOrderItemStatusSchema.parse(req.body);
   const item = await vendorService.updateOrderItemStatus(uid(req), req.params.orderItemId, input.status);
+  res.json({ success: true, data: item, error: null });
+});
+
+export const setShippingInfoHandler = asyncHandler(async (req: Request, res: Response) => {
+  const input = setShippingInfoSchema.parse(req.body);
+  const item = await deliveryService.setShippingInfo(uid(req), req.params.orderItemId, input);
   res.json({ success: true, data: item, error: null });
 });

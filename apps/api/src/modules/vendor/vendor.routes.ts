@@ -14,6 +14,7 @@ import {
   removeImageHandler,
   updateInventoryHandler,
   updateOrderItemStatusHandler,
+  setShippingInfoHandler,
   updateProductHandler,
   updateStoreHandler,
 } from "./vendor.controller";
@@ -41,3 +42,4 @@ vendorRouter.patch("/products/:id/variants/:variantId/inventory", updateInventor
 
 vendorRouter.get("/orders", listOrdersHandler);
 vendorRouter.patch("/orders/:orderItemId/status", updateOrderItemStatusHandler);
+vendorRouter.patch("/orders/:orderItemId/shipping", setShippingInfoHandler);

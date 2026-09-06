@@ -11,6 +11,8 @@ import {
   notifyVendorsOfNewOrder,
 } from "../notifications/notifications.service";
 import { logger } from "../../lib/logger";
+import { computeEffectivePrice } from "../marketing/pricing";
+import { getActiveFlashSalesForProducts } from "../marketing/marketing.service";
 
 // Flat shipping fee per order (smallest currency unit). Real per-vendor or
 // distance-based shipping logic is a Phase 13 (delivery) concern.
@@ -67,9 +69,15 @@ export async function checkout(userId: string, input: CheckoutInput) {
   const products = await prisma.product.findMany({ where: { id: { in: productIds } } });
   const productMap = new Map(products.map((p: any) => [p.id, p]));
 
+  // Same flash-sale resolution used by cart display (cart.service.ts) and
+  // product pages (products.service.ts) — this is what guarantees the
+  // customer is charged exactly the price they were shown, not basePrice.
+  const flashSales = await getActiveFlashSalesForProducts(productIds as string[]);
+
   const lineItems = cartWithItems.items.map((item: any) => {
     const product = productMap.get(item.productId);
-    const unitPrice = (product?.basePrice ?? 0) + item.productVariant.priceDelta;
+    const variantBase = (product?.basePrice ?? 0) + item.productVariant.priceDelta;
+    const unitPrice = computeEffectivePrice(variantBase, null, flashSales.get(item.productId) ?? null).price;
     return {
       productId: item.productId,
       productVariantId: item.productVariantId,
@@ -155,6 +163,13 @@ export async function checkout(userId: string, input: CheckoutInput) {
         },
         include: { items: true },
       });
+
+      // Seed the order timeline — one PENDING event per item, atomic with
+      // order creation itself, so "when was this order placed" is always
+      // the first row rather than something inferred from Order.createdAt.
+      for (const item of createdOrder.items) {
+        await tx.orderStatusEvent.create({ data: { orderItemId: item.id, status: "PENDING" } });
+      }
 
       // Empty the cart now that its contents have become an order.
       await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
@@ -270,6 +285,7 @@ export async function performOrderCancellation(orderId: string) {
   await prisma.$transaction(async (tx: any) => {
     for (const item of cancellableItems) {
       await tx.orderItem.update({ where: { id: item.id }, data: { status: "CANCELLED" } });
+      await tx.orderStatusEvent.create({ data: { orderItemId: item.id, status: "CANCELLED" } });
       await tx.inventoryRecord.update({
         where: { productVariantId: item.productVariantId },
         data: { quantity: { increment: item.quantity } },
