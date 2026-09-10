@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { prisma } from "../../lib/prisma";
 import { AppError, ForbiddenError, NotFoundError } from "../../lib/errors";
+import { CANCELLABLE_STATUSES } from "../../lib/orderStatusMachine";
 import { CheckoutInput, OrderListQuery } from "./orders.schemas";
 import { chargeForCheckout, recordTransaction, refundFailedCheckout, refundOrder, listOrderTransactions } from "../payments/payments.service";
 import {
@@ -257,7 +258,8 @@ export async function getOrder(userId: string, orderId: string) {
   return order;
 }
 
-const CANCELLABLE_STATUSES = new Set(["PENDING", "CONFIRMED"]);
+// Exported for direct unit testing (see orders.service.unit.test.ts).
+export { CANCELLABLE_STATUSES };
 
 /**
  * Core cancellation logic, independent of who's allowed to invoke it.
