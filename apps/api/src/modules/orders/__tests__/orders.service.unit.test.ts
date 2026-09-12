@@ -11,9 +11,6 @@ describe("CANCELLABLE_STATUSES", () => {
   });
 
   it("does NOT allow cancelling a SHIPPED item", () => {
-    // Once a courier has it, cancellation must go through a return/refund
-    // flow instead — silently "cancelling" a shipped item would leave the
-    // physical package in transit with no corresponding system state.
     expect(CANCELLABLE_STATUSES.has("SHIPPED")).toBe(false);
   });
 

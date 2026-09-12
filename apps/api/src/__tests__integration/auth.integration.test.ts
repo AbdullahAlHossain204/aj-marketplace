@@ -1,20 +1,9 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, afterAll } from "vitest";
 import request from "supertest";
 import { createApp } from "../app";
 import { prisma } from "../lib/prisma";
 
-/**
- * Integration tests hit the real Express app + a real Postgres database
- * through Prisma — nothing here is mocked. Requires:
- *   1. DATABASE_URL pointing at a real (ideally disposable) Postgres DB
- *   2. `prisma migrate deploy` already run against it
- * Run with: npm run test:integration
- * See README-TESTING.md for full setup.
- */
 const app = createApp();
-
-// Unique per test run so repeated runs don't collide on the email
-// uniqueness constraint.
 const testEmail = `test-${Date.now()}@example.com`;
 
 describe("Auth flow (integration)", () => {
@@ -32,7 +21,6 @@ describe("Auth flow (integration)", () => {
     expect(res.body.success).toBe(true);
     expect(res.body.data.accessToken).toBeTruthy();
     expect(res.body.data.user.email).toBe(testEmail);
-    // Password hash must never appear in the response.
     expect(res.body.data.user.password).toBeUndefined();
   });
 
@@ -51,7 +39,6 @@ describe("Auth flow (integration)", () => {
       .send({ email: testEmail, password: "WrongPassword1" });
 
     expect(res.status).toBe(401);
-    // Must not reveal whether the account exists or which field was wrong.
     expect(res.body.error.message).toBe("Invalid email or password");
   });
 

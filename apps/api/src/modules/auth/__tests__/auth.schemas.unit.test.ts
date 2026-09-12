@@ -45,8 +45,6 @@ describe("registerSchema", () => {
   });
 
   it("rejects ADMIN as a self-registerable role", () => {
-    // registerSchema's role enum is ["CUSTOMER", "VENDOR"] only — ADMIN
-    // accounts must never be creatable through public registration.
     const r = registerSchema.safeParse({ ...base, role: "ADMIN" });
     expect(r.success).toBe(false);
   });

@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
 import { AppError } from "../lib/errors";
 import { logger } from "../lib/logger";
+import { errorReporter } from "../lib/errorReporter";
 import { env } from "../config/env";
 
 /**
@@ -37,12 +38,15 @@ export function errorHandler(
   }
 
   // Anything else is unexpected — log full detail server-side, never leak
-  // stack traces or internals to the client.
+  // stack traces or internals to the client, and report it to the error
+  // monitoring provider (see lib/errorReporter.ts) since this represents
+  // an actual bug someone should be alerted to, unlike an AppError.
   logger.error("Unhandled error", {
     path: req.path,
     method: req.method,
     error: err instanceof Error ? err.stack : String(err),
   });
+  errorReporter.captureException(err, { path: req.path, method: req.method });
 
   return res.status(500).json({
     success: false,

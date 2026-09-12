@@ -1,0 +1,58 @@
+# For local, production-like testing of the full stack — NOT what's used
+# in actual production (there, the API and web run as separate deployed
+# services per docs/PRODUCTION.md, and Postgres is a managed database, not
+# a container). This is a convenience for verifying the Docker images
+# themselves work end-to-end before deploying them anywhere.
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ajmarket
+      POSTGRES_PASSWORD: ajmarket_dev_only
+      POSTGRES_DB: aj_market
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ajmarket"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: "postgresql://ajmarket:ajmarket_dev_only@postgres:5432/aj_market?schema=public"
+      # These are throwaway values for local compose testing only — real
+      # deployments must set their own via the hosting platform, never here.
+      JWT_ACCESS_SECRET: "local-compose-test-secret-do-not-use-in-prod"
+      JWT_REFRESH_SECRET: "local-compose-test-secret-do-not-use-in-prod-2"
+      ACCESS_TOKEN_TTL: "15m"
+      REFRESH_TOKEN_TTL: "7d"
+      CORS_ORIGIN: "http://localhost:3000"
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: "http://localhost:4000"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:

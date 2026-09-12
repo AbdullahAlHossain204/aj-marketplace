@@ -3,9 +3,6 @@ import { productListQuerySchema, suggestQuerySchema } from "../products.schemas"
 
 describe("productListQuerySchema", () => {
   it("parses inStock='false' as boolean false, not truthy", () => {
-    // Regression test: z.coerce.boolean() treats the STRING "false" as
-    // true (JS Boolean("false") === true). This was a real bug caught
-    // and fixed during Phase 9 — this test guards against it recurring.
     const r = productListQuerySchema.parse({ inStock: "false" });
     expect(r.inStock).toBe(false);
   });

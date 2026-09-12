@@ -12,7 +12,19 @@ export class AppError extends Error {
     super(message);
     this.statusCode = statusCode;
     this.isOperational = true;
-    Object.setPrototypeOf(this, AppError.prototype);
+    // NOTE: no Object.setPrototypeOf() call here — this codebase targets
+    // ES2022 (see tsconfig.json), where native `class X extends Error`
+    // already sets the prototype chain correctly. An earlier version of
+    // this file called `Object.setPrototypeOf(this, AppError.prototype)`,
+    // the classic ES5 workaround for broken Error subclassing — but run
+    // unconditionally in the base class constructor, it actually
+    // OVERWROTE the correct subclass prototype every time a subclass
+    // (NotFoundError, UnauthorizedError, etc.) called super(). The result:
+    // `err instanceof UnauthorizedError` was silently always false,
+    // caught by this project's Phase 15 test suite. Nothing in production
+    // code checked instanceof on the specific subclasses (only on
+    // AppError itself, in errorHandler.ts), so this had zero live impact
+    // — but it was a real, latent bug worth fixing outright.
   }
 }
 

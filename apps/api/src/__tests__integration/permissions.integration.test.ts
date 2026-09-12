@@ -3,12 +3,6 @@ import request from "supertest";
 import { createApp } from "../app";
 import { prisma } from "../lib/prisma";
 
-/**
- * Cross-role permission boundaries — the highest-stakes area to get
- * wrong in a multi-vendor marketplace: a customer must never reach admin
- * or vendor-only routes, and a vendor must never touch another vendor's
- * data. Run with: npm run test:integration (real Postgres required).
- */
 const app = createApp();
 const suffix = Date.now();
 
@@ -61,7 +55,6 @@ describe("Permission boundaries (integration)", () => {
       .set("Authorization", `Bearer ${tokenB}`)
       .send({ name: `Store B ${suffix}`, slug: `store-b-${suffix}` });
 
-    // Vendor B's own product list must never include anything from Store A.
     const res = await request(app).get("/api/v1/vendor/products").set("Authorization", `Bearer ${tokenB}`);
     expect(res.status).toBe(200);
     expect(res.body.data.every((p: any) => p.storeId !== undefined)).toBe(true);
