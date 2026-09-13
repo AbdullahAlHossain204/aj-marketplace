@@ -13,36 +13,30 @@ describe("computeEffectivePrice", () => {
     expect(r.price).toBe(1000);
     expect(r.compareAtPrice).toBeNull();
   });
-
   it("shows vendor compareAtPrice when no flash sale is active", () => {
     const r = computeEffectivePrice(1000, 1200, null, now);
     expect(r.price).toBe(1000);
     expect(r.compareAtPrice).toBe(1200);
   });
-
   it("applies a percentage flash sale and sets compareAtPrice to the original", () => {
     const r = computeEffectivePrice(1000, null, activeSale, now);
     expect(r.price).toBe(800);
     expect(r.compareAtPrice).toBe(1000);
     expect(r.activeFlashSale).toEqual(activeSale);
   });
-
   it("applies a fixed-amount flash sale", () => {
     const r = computeEffectivePrice(1000, null, fixedSale, now);
     expect(r.price).toBe(700);
   });
-
   it("ignores a flash sale whose endsAt is in the past", () => {
     const r = computeEffectivePrice(1000, null, expiredSale, now);
     expect(r.price).toBe(1000);
     expect(r.activeFlashSale).toBeNull();
   });
-
   it("never lets a fixed discount push price below zero", () => {
     const r = computeEffectivePrice(1000, null, bigDiscount, now);
     expect(r.price).toBe(0);
   });
-
   it("prefers the flash sale price over a vendor compareAtPrice when both exist", () => {
     const r = computeEffectivePrice(1000, 900, activeSale, now);
     expect(r.price).toBe(800);

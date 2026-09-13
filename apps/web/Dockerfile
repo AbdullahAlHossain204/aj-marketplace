@@ -1,5 +1,4 @@
 # syntax=docker/dockerfile:1
-
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -11,15 +10,10 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 COPY apps/web ./apps/web
-# The only env var the frontend needs at build time — it's baked into the
-# client bundle (that's how NEXT_PUBLIC_* vars work), so it must be correct
-# here, not just set at container runtime.
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 RUN npm run build --workspace=apps/web
 
-# ---- runtime: Next.js "standalone" output is a minimal self-contained
-# server — no need to copy the full node_modules tree into the final image.
 FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production

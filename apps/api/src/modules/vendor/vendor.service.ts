@@ -2,6 +2,7 @@ import { prisma } from "../../lib/prisma";
 import { AppError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors";
 import { notifyOrderStatusChanged } from "../notifications/notifications.service";
 import { recordStatusEvent } from "../delivery/delivery.service";
+import { VENDOR_STATUS_TRANSITIONS } from "../../lib/orderStatusMachine";
 import {
   AddImageInput,
   CreateProductInput,
@@ -291,14 +292,10 @@ export async function getDashboardOverview(userId: string) {
 
 // ---- ORDERS (vendor's slice of each order) ---------------------------------
 
-const VENDOR_STATUS_TRANSITIONS: Record<string, string[]> = {
-  PENDING: ["CONFIRMED", "CANCELLED"],
-  CONFIRMED: ["PROCESSING", "CANCELLED"],
-  PROCESSING: ["SHIPPED", "CANCELLED"],
-  SHIPPED: ["DELIVERED"],
-  DELIVERED: [],
-  CANCELLED: [],
-};
+// Exported so this state machine can be unit-tested directly (see
+// vendor.service.unit.test.ts) without needing a database — the actual
+// transition logic is pure and deserves its own focused test.
+export { VENDOR_STATUS_TRANSITIONS };
 
 export async function listMyOrders(userId: string) {
   const { store } = await getOwnStore(userId);

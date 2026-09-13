@@ -1,7 +1,4 @@
 name: CI
-
-# Runs on every push and pull request against main — catches broken builds
-# and failing tests before they reach production, not after.
 on:
   push:
     branches: [main]
@@ -14,47 +11,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Generate Prisma client
-        run: npm run prisma:generate --workspace=apps/api
-
-      - name: Typecheck
-        run: npm run typecheck --workspace=apps/api
-
-      - name: Build
-        run: npm run build --workspace=apps/api
-
-      - name: Unit tests
-        run: npm test --workspace=apps/api
+      - run: npm ci
+      - run: npm run prisma:generate --workspace=apps/api
+      - run: npm run typecheck --workspace=apps/api
+      - run: npm run build --workspace=apps/api
+      - run: npm test --workspace=apps/api
 
   web:
     name: Web — typecheck, build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Typecheck
-        run: npm run typecheck --workspace=apps/web
-
+      - run: npm ci
+      - run: npm run typecheck --workspace=apps/web
       - name: Build
         env:
-          # A placeholder is fine here — this build only verifies the
-          # frontend compiles, it isn't the artifact that gets deployed.
           NEXT_PUBLIC_API_URL: "https://api.placeholder.invalid"
         run: npm run build --workspace=apps/web
